@@ -11,6 +11,9 @@ PASTA_DESTINO = Path(r"C:\Dados\Usina_7_Forno\003 - Dados CSV\01 - Dados Dividid
 N_AMOSTRAS_FALHA = 2000
 SALVAR_GRAFICOS = True
 
+# Quantas amostras antes do início da falha você quer mostrar no sinal com falha
+AMOSTRAS_ANTES_FALHA_PLOT = 10
+
 # =========================
 # LEITURA
 # =========================
@@ -56,12 +59,43 @@ def aplicar_falha_congelamento_tc(df: pd.DataFrame, n_amostras: int = 2000):
 # =========================
 # PLOT
 # =========================
-def plot_tc_comparacao(nome_arquivo, tc_original, tc_modificado, idx_inicio_falha, pasta_destino=None):
+def plot_tc_comparacao(
+    nome_arquivo,
+    tc_original,
+    tc_modificado,
+    idx_inicio_falha,
+    pasta_destino=None,
+    amostras_antes_falha_plot=0
+):
     plt.figure(figsize=(14, 6))
-    plt.plot(tc_original.values, label='TC original')
-    plt.plot(tc_modificado.values, label='TC congelado')
-    plt.axvline(x=idx_inicio_falha, linestyle='--', label='Início da falha')
-    #plt.axvspan(idx_inicio_falha, len(tc_original)-1, alpha=0.15, label='Região com falha')
+
+    # Fundo vermelho claro na região de falha
+    plt.axvspan(
+        idx_inicio_falha,
+        len(tc_original) - 1,
+        color='red',
+        alpha=0.10,
+        label='Região de falha'
+    )
+
+    # TC original no gráfico inteiro (mantém a cor azul padrão)
+    plt.plot(
+        tc_original.values,
+        label='TC original',
+        linewidth=1.8
+    )
+
+    # TC congelado aparece a partir de algumas amostras antes da falha
+    inicio_plot_falha = max(0, idx_inicio_falha - amostras_antes_falha_plot)
+
+    plt.plot(
+        range(inicio_plot_falha, len(tc_modificado)),
+        tc_modificado.iloc[inicio_plot_falha:].values,
+        label='TC congelado',
+        linewidth=1.8
+    )
+
+
 
     plt.title(f'Comparação TC - {nome_arquivo}')
     plt.xlabel('Amostra')
@@ -103,11 +137,12 @@ def main():
             df_mod.to_csv(caminho_destino, sep=';', decimal=',', index=False, encoding='utf-8-sig')
 
             plot_tc_comparacao(
-                nome_arquivo,
-                tc_original,
-                df_mod['TC'],
-                idx_inicio_falha,
-                pasta_destino=PASTA_DESTINO if SALVAR_GRAFICOS else None
+                nome_arquivo=nome_arquivo,
+                tc_original=tc_original,
+                tc_modificado=df_mod['TC'],
+                idx_inicio_falha=idx_inicio_falha,
+                pasta_destino=PASTA_DESTINO if SALVAR_GRAFICOS else None,
+                amostras_antes_falha_plot=AMOSTRAS_ANTES_FALHA_PLOT
             )
 
             arquivos_processados += 1
