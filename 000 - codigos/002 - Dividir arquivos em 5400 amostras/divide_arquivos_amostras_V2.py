@@ -16,7 +16,7 @@ SEP = ";"
 DECIMAL = ","
 ENCODING = "utf-8-sig"
 
-MAX_FALTAS = 600   # até 180 amostras faltando (gaps até 181s entre pontos)
+MAX_FALTAS = 60   # até 60 amostras faltando (gaps até 61s entre pontos)
 RUIDO_REL = 0.02
 SEED = 42
 
