@@ -8,7 +8,7 @@ import matplotlib.dates as mdates
 # CONFIG
 # ============================================================
 PASTA_SAIDA = r"C:\Dados\Usina_7_Forno\003 - Dados CSV\01 - Dados Divididos 2h\"
-PASTA_PLOTS = r"C:\Dados\Usina_7_Forno\003 - Dados CSV\01 - Dados Divididos 2h\Plots"
+PASTA_PLOTS = r"C:\Dados\Usina_7_Forno\003 - Dados CSV\01 - Dados Divididos 2h\Plots\"
 
 SEP = ";"
 DECIMAL = ","
