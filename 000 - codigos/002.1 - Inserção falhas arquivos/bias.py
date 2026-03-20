@@ -13,7 +13,6 @@ PASTA_DESTINO = Path(r"C:\Dados\Usina_7_Forno\003 - Dados CSV\01 - Dados Dividid
 N_AMOSTRAS_FALHA = 2000
 
 # Valor do bias persistente
-# Ex.: 10 => soma +10 ao TC nas últimas 2000 amostras
 BIAS_VALOR = 10.0
 
 # Salvar gráficos em PNG
@@ -47,7 +46,7 @@ def aplicar_falha_bias_tc(df: pd.DataFrame, n_amostras: int = 2000, bias_valor: 
 
     n_total = len(df_mod)
 
-    # Se o arquivo tiver menos de 2000 linhas, aplica no arquivo todo
+    # Se o arquivo tiver menos linhas, aplica no arquivo todo
     n_falha = min(n_amostras, n_total)
     idx_inicio = n_total - n_falha
 
@@ -65,9 +64,32 @@ def aplicar_falha_bias_tc(df: pd.DataFrame, n_amostras: int = 2000, bias_valor: 
 # =========================
 def plot_tc_comparacao(nome_arquivo, tc_original, tc_modificado, idx_inicio_falha, pasta_destino=None):
     plt.figure(figsize=(14, 6))
-    plt.plot(tc_original.values, label='TC original')
-    plt.plot(tc_modificado.values, label='TC com bias persistente')
-    plt.axvline(x=idx_inicio_falha, linestyle='--', label='Início da falha')
+
+    # Fundo vermelho claro na região de falha
+    plt.axvspan(
+        idx_inicio_falha,
+        len(tc_original) - 1,
+        color='red',
+        alpha=0.10,
+        label='Região de falha'
+    )
+
+    # TC original (cor azul padrão matplotlib)
+    plt.plot(
+        tc_original.values,
+        label='TC original',
+        linewidth=1.8
+    )
+
+    # TC com falha aparece somente a partir do início da falha
+    inicio_plot = max(0, idx_inicio_falha - 10)
+
+    plt.plot(
+        range(inicio_plot, len(tc_modificado)),
+        tc_modificado.iloc[inicio_plot:].values,
+        label='TC com bias persistente',
+        linewidth=1.8
+    )
 
     plt.title(f'Comparação TC - {nome_arquivo}')
     plt.xlabel('Amostra')
