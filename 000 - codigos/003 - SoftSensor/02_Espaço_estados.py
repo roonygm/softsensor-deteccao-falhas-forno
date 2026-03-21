@@ -5,26 +5,26 @@ import matplotlib.pyplot as plt
 # =========================================================
 # COEFICIENTES IDENTIFICADOS
 # =========================================================
-alpha = 0.995
-c0 = -5.050626
-a_TL = 0.445554
-b_TR = 0.537991
-d_Gf = 0.067165
+alpha = 0.9945
+c0 = 27.40
+a_TL = 0.401
+b_TR = 0.551
+d_Gf = 0.094
 
 # =========================================================
 # MATRIZES ESPAÇO DE ESTADOS
 # =========================================================
 A = alpha
-B = np.array([1-alpha, 0.0, 0.0])     # GAS, TL, TR
+B = np.array([1 - alpha, 0.0, 0.0])   # GAS, TL, TR
 C = d_Gf
 D = np.array([0.0, a_TL, b_TR])
 
 # =========================================================
-# LEITURA
+# LEITURA DO CSV
 # =========================================================
 def read_one_csv(path):
     df = pd.read_csv(path, sep=';', decimal=',', engine='python')
-    df.columns = [str(c).replace('\ufeff','').strip() for c in df.columns]
+    df.columns = [str(c).replace('\ufeff', '').strip() for c in df.columns]
 
     df = df.rename(columns={
         'Intouch.U7_TT2421_UE': 'TL',
@@ -33,7 +33,7 @@ def read_one_csv(path):
         'Intouch.FZIT_G55_2301_UE': 'GAS'
     })
 
-    df = df[['TL','TR','TC','GAS']].apply(pd.to_numeric, errors='coerce')
+    df = df[['TL', 'TR', 'TC', 'GAS']].apply(pd.to_numeric, errors='coerce')
     df = df.dropna().reset_index(drop=True)
     return df
 
@@ -48,14 +48,14 @@ def softsensor(df):
     Gf = np.zeros(len(df))
     Gf[0] = GAS[0]
 
-    for k in range(1,len(df)):
-        Gf[k] = alpha*Gf[k-1] + (1-alpha)*GAS[k]
+    for k in range(1, len(df)):
+        Gf[k] = alpha * Gf[k - 1] + (1 - alpha) * GAS[k]
 
-    yhat = c0 + a_TL*TL + b_TR*TR + d_Gf*Gf
+    yhat = c0 + a_TL * TL + b_TR * TR + d_Gf * Gf
     return yhat, Gf
 
 # =========================================================
-# MODELO ESPAÇO DE ESTADOS MISO
+# MODELO EM ESPAÇO DE ESTADOS
 # =========================================================
 def state_space(df):
     GAS = df['GAS'].values
@@ -67,49 +67,111 @@ def state_space(df):
 
     x[0] = GAS[0]
 
-    for k in range(1,len(df)):
-        u = np.array([GAS[k-1], TL[k-1], TR[k-1]])
-        x[k] = A*x[k-1] + B @ u
+    for k in range(1, len(df)):
+        u = np.array([GAS[k - 1], TL[k - 1], TR[k - 1]])
+        x[k] = A * x[k - 1] + B @ u
 
     for k in range(len(df)):
         u = np.array([GAS[k], TL[k], TR[k]])
-        yhat[k] = C*x[k] + D @ u + c0
+        yhat[k] = C * x[k] + D @ u + c0
 
     return yhat, x
 
 # =========================================================
+# CAMINHO DO ARQUIVO
+# =========================================================
+path_csv = r'C:\Dados\Usina_7_Forno\003 - Dados CSV\01 - Dados Divididos 2h\00 - Cruzeiro\00 - Treinamento Modelo\01.csv'
+
+# =========================================================
 # EXECUÇÃO
 # =========================================================
-df = read_one_csv(
-    r'C:\Dados\Usina_7_Forno\003 - Dados CSV\01 - Dados Divididos 2h\00 - Cruzeiro\00 - Treinamento Modelo\01.csv'
-)
+df = read_one_csv(path_csv)
 
 y_real = df['TC'].values
-
 y_soft, gf = softsensor(df)
 y_ss, x_ss = state_space(df)
 
-print('Diferença máxima entre modelos:',
-      np.max(np.abs(y_soft - y_ss)))
+residuo = y_soft - y_ss
+dif_max = np.max(np.abs(residuo))
+
+print('Diferença máxima entre modelos:', dif_max)
+
+# =========================================================
+# EIXO DO TEMPO
+# =========================================================
+t = np.arange(len(df))
 
 # =========================================================
 # PLOT
 # =========================================================
-t = np.arange(len(df))
+fig, (ax1, ax2) = plt.subplots(
+    2, 1,
+    figsize=(15, 8),
+    sharex=True,
+    gridspec_kw={'height_ratios': [3, 1]}
+)
 
-plt.figure(figsize=(14,6))
-plt.plot(t, y_real, label='TC real')
-plt.plot(t, y_soft, label='Softsensor direto')
-plt.plot(t, y_ss, '--', label='Espaço de estados')
-plt.legend()
-plt.grid()
-plt.title('Comparação Softsensor vs Espaço de Estados')
-plt.xlabel('Amostra (s)')
-plt.ylabel('Temperatura')
-plt.show()
+# ---------------------------------------------------------
+# GRÁFICO PRINCIPAL
+# ---------------------------------------------------------
+ax1.plot(
+    t, y_real,
+    color='blue',
+    linewidth=1.8,
+    label='TC real',
+    zorder=1
+)
 
-plt.figure(figsize=(14,4))
-plt.plot(t, y_soft - y_ss)
-plt.title('Diferença entre modelos')
-plt.grid()
+ax1.plot(
+    t, y_soft,
+    color='black',
+    linewidth=2.0,
+    alpha=0.85,
+    label='Softsensor direto',
+    zorder=2
+)
+
+linha_ss, = ax1.plot(
+    t, y_ss,
+    color='red',
+    linewidth=1.8,
+    linestyle='--',
+    marker='o',
+    markersize=2.5,
+    markevery=max(len(t) // 80, 1),
+    alpha=0.95,
+    label='Espaço de estados',
+    zorder=3
+)
+
+# Tracejado mais espaçado
+linha_ss.set_dashes([2, 20])
+
+ax1.set_title('Comparação entre TC real e modelos do Softsensor')
+ax1.set_ylabel('Temperatura')
+ax1.grid(True, alpha=0.99)
+ax1.legend(loc='best')
+
+# ---------------------------------------------------------
+# RESÍDUO
+# ---------------------------------------------------------
+ax2.plot(
+    t, residuo,
+    color='purple',
+    linewidth=1.5,
+    label='Resíduo entre modelos'
+)
+
+ax2.axhline(0, color='black', linestyle='--', linewidth=1)
+
+# Escala fixa solicitada
+ax2.set_ylim(-0.03, 0.03)
+
+ax2.set_title(f'Resíduo entre os modelos')
+ax2.set_xlabel('Amostra')
+ax2.set_ylabel('Erro')
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc='best')
+
+plt.tight_layout()
 plt.show()
