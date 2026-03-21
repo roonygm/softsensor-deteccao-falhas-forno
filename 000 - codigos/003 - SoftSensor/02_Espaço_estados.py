@@ -14,10 +14,52 @@ d_Gf = 0.094
 # =========================================================
 # MATRIZES ESPAÇO DE ESTADOS
 # =========================================================
-A = alpha
-B = np.array([1 - alpha, 0.0, 0.0])   # GAS, TL, TR
-C = d_Gf
-D = np.array([0.0, a_TL, b_TR])
+# Estado: x(k) = Gf(k)
+# Entradas: u(k) = [GAS(k), TL(k), TR(k)]^T
+# Saída: y(k) = TC estimada
+A = np.array([[alpha]])
+B = np.array([[1 - alpha, 0.0, 0.0]])   # [GAS, TL, TR]
+C = np.array([[d_Gf]])
+D = np.array([[0.0, a_TL, b_TR]])
+
+# =========================================================
+# EXIBIÇÃO DAS MATRIZES
+# =========================================================
+def mostrar_matrizes():
+    np.set_printoptions(precision=6, suppress=True)
+
+    print('\n' + '='*60)
+    print('MODELO EM ESPAÇO DE ESTADOS')
+    print('='*60)
+
+    print('\nEquações do modelo:')
+    print('x(k+1) = A x(k) + B u(k)')
+    print('y(k)   = C x(k) + D u(k) + c0')
+
+    print('\nDefinições:')
+    print('x(k) = Gf(k)')
+    print('u(k) = [ GAS(k)  TL(k)  TR(k) ]^T')
+    print('y(k) = TC estimada')
+
+    print('\nMatriz A:')
+    print(A)
+
+    print('\nMatriz B:')
+    print(B)
+
+    print('\nMatriz C:')
+    print(C)
+
+    print('\nMatriz D:')
+    print(D)
+
+    print('\nTermo constante:')
+    print(f'c0 = {c0}')
+
+    print('\nForma expandida:')
+    print(f'x(k+1) = {alpha:.6f}·x(k) + {1-alpha:.6f}·GAS(k)')
+    print(f'y(k)   = {d_Gf:.6f}·x(k) + {a_TL:.6f}·TL(k) + {b_TR:.6f}·TR(k) + {c0:.6f}')
+    print('='*60 + '\n')
 
 # =========================================================
 # LEITURA DO CSV
@@ -62,20 +104,20 @@ def state_space(df):
     TL = df['TL'].values
     TR = df['TR'].values
 
-    x = np.zeros(len(df))
+    x = np.zeros((1, len(df)))
     yhat = np.zeros(len(df))
 
-    x[0] = GAS[0]
+    x[0, 0] = GAS[0]
 
     for k in range(1, len(df)):
-        u = np.array([GAS[k - 1], TL[k - 1], TR[k - 1]])
-        x[k] = A * x[k - 1] + B @ u
+        u = np.array([[GAS[k - 1]], [TL[k - 1]], [TR[k - 1]]])
+        x[:, k] = (A @ x[:, [k - 1]] + B @ u).flatten()
 
     for k in range(len(df)):
-        u = np.array([GAS[k], TL[k], TR[k]])
-        yhat[k] = C * x[k] + D @ u + c0
+        u = np.array([[GAS[k]], [TL[k]], [TR[k]]])
+        yhat[k] = (C @ x[:, [k]] + D @ u).item() + c0
 
-    return yhat, x
+    return yhat, x.flatten()
 
 # =========================================================
 # CAMINHO DO ARQUIVO
@@ -85,6 +127,8 @@ path_csv = r'C:\Dados\Usina_7_Forno\003 - Dados CSV\01 - Dados Divididos 2h\00 -
 # =========================================================
 # EXECUÇÃO
 # =========================================================
+mostrar_matrizes()
+
 df = read_one_csv(path_csv)
 
 y_real = df['TC'].values
@@ -163,11 +207,9 @@ ax2.plot(
 )
 
 ax2.axhline(0, color='black', linestyle='--', linewidth=1)
-
-# Escala fixa solicitada
 ax2.set_ylim(-0.03, 0.03)
 
-ax2.set_title(f'Resíduo entre os modelos')
+ax2.set_title('Resíduo entre os modelos')
 ax2.set_xlabel('Amostra')
 ax2.set_ylabel('Erro')
 ax2.grid(True, alpha=0.3)
