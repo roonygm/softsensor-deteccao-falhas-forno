@@ -2,6 +2,7 @@ import os
 import glob
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 # =========================================================
 # CONFIGURAÇÕES
@@ -68,10 +69,7 @@ def compute_gf(gas, alpha=0.9945, beta=0.0055, gf0=None):
     if len(gas) == 0:
         return gf
 
-    if gf0 is None:
-        gf[0] = gas[0]
-    else:
-        gf[0] = gf0
+    gf[0] = gas[0] if gf0 is None else gf0
 
     for k in range(1, len(gas)):
         gf[k] = alpha * gf[k - 1] + beta * gas[k]
@@ -91,26 +89,9 @@ def compute_yhat(
     beta: float = 0.0055,
     gf0=None
 ) -> pd.DataFrame:
-    """
-    Nova arquitetura:
-
-    Estados:
-        x(k) = [Gf(k), TL_est(k), TR_est(k)]^T
-
-    Dinâmica:
-        Gf(k+1)     = alpha * Gf(k) + beta * GAS(k)
-        TL_est(k+1) = TL(k)
-        TR_est(k+1) = TR(k)
-
-    Saída:
-        Yhat(k) = c0 + d_gf*Gf(k) + a_tl*TL_est(k) + b_tr*TR_est(k)
-    """
 
     out = df.copy()
 
-    # ---------------------------------------------
-    # Estado Gf
-    # ---------------------------------------------
     out['Gf'] = compute_gf(
         gas=out['GAS'].values,
         alpha=alpha,
@@ -118,9 +99,6 @@ def compute_yhat(
         gf0=gf0
     )
 
-    # ---------------------------------------------
-    # Estados TL_est e TR_est
-    # ---------------------------------------------
     tl = out['TL'].to_numpy(dtype=float)
     tr = out['TR'].to_numpy(dtype=float)
 
@@ -128,11 +106,9 @@ def compute_yhat(
     tr_est = np.zeros(len(out), dtype=float)
 
     if len(out) > 0:
-        # condição inicial
         tl_est[0] = tl[0]
         tr_est[0] = tr[0]
 
-        # atualização dos estados
         for k in range(1, len(out)):
             tl_est[k] = tl[k - 1]
             tr_est[k] = tr[k - 1]
@@ -140,9 +116,6 @@ def compute_yhat(
     out['TL_est'] = tl_est
     out['TR_est'] = tr_est
 
-    # ---------------------------------------------
-    # Saída estimada
-    # ---------------------------------------------
     out['Yhat'] = (
         c0
         + d_gf * out['Gf']
@@ -150,9 +123,6 @@ def compute_yhat(
         + b_tr * out['TR_est']
     )
 
-    # ---------------------------------------------
-    # Resíduo
-    # ---------------------------------------------
     out['residuo'] = out['TC'] - out['Yhat']
 
     return out
@@ -169,26 +139,9 @@ def estimate_R_from_residual(residual, ddof=1):
     return float(np.var(residual, ddof=ddof))
 
 # =========================================================
-# MÉTRICAS AUXILIARES
-# =========================================================
-def calc_metrics(y_true, y_pred):
-    y_true = np.asarray(y_true, dtype=float)
-    y_pred = np.asarray(y_pred, dtype=float)
-
-    err = y_true - y_pred
-    rmse = float(np.sqrt(np.mean(err**2)))
-    mae = float(np.mean(np.abs(err)))
-
-    ss_res = np.sum(err**2)
-    ss_tot = np.sum((y_true - np.mean(y_true))**2)
-    r2 = float(1.0 - ss_res / ss_tot) if ss_tot > 0 else np.nan
-
-    return rmse, mae, r2
-
-# =========================================================
 # PROCESSAMENTO DE UM ARQUIVO
 # =========================================================
-def process_one_file(path: str) -> dict:
+def process_one_file(path: str):
     df = read_one_csv(path)
 
     out = compute_yhat(
@@ -203,30 +156,53 @@ def process_one_file(path: str) -> dict:
     )
 
     R_est = estimate_R_from_residual(out['residuo'].values, ddof=1)
-    rmse, mae, r2 = calc_metrics(out['TC'].values, out['Yhat'].values)
+    std_residuo = float(out['residuo'].std(ddof=1)) if len(out) > 1 else np.nan
 
     result = {
         'Arquivo': os.path.basename(path),
-        'N_amostras': len(out),
-        'Media_TC': float(out['TC'].mean()),
-        'Media_Yhat': float(out['Yhat'].mean()),
-        'Media_residuo': float(out['residuo'].mean()),
-        'Std_residuo': float(out['residuo'].std(ddof=1)) if len(out) > 1 else np.nan,
-        'Var_residuo': float(out['residuo'].var(ddof=1)) if len(out) > 1 else np.nan,
-        'R_estimado': R_est,
-        'RMSE': rmse,
-        'MAE': mae,
-        'R2': r2
+        'R': R_est,
+        'Desvio_padrao': std_residuo
     }
 
     return result, out
+
+# =========================================================
+# HISTOGRAMA
+# =========================================================
+def plot_histograma_R(valores_R, out_path):
+    valores_R = np.asarray(valores_R, dtype=float)
+    valores_R = valores_R[~np.isnan(valores_R)]
+
+    if len(valores_R) == 0:
+        print('Não há valores válidos de R para plotar o histograma.')
+        return
+
+    media_R = np.mean(valores_R)
+    desvio_R = np.std(valores_R, ddof=1) if len(valores_R) > 1 else 0.0
+    limite_2sigma = media_R + 4 * desvio_R
+
+    plt.figure(figsize=(10, 6))
+    plt.hist(valores_R, bins=15, edgecolor='black', alpha=0.7)
+
+    plt.axvline(media_R, color='blue', linestyle='--', linewidth=2, label=f'Média = {media_R:.4f}')
+    plt.axvline(limite_2sigma, color='red', linestyle='--', linewidth=2,
+                label=f'Média + 2σ = {limite_2sigma:.4f}')
+
+    plt.xlabel('R')
+    plt.ylabel('Frequência')
+    plt.title('Histograma dos valores de R por arquivo')
+    plt.legend()
+    plt.grid(True, linestyle=':', alpha=0.5)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=300)
+    plt.close()
 
 # =========================================================
 # EXECUÇÃO PRINCIPAL
 # =========================================================
 def main():
     print('=' * 80)
-    print('Estimativa de R com a nova arquitetura em espaço de estados')
+    print('Estimativa de R por arquivo')
     print('=' * 80)
 
     if not FILES:
@@ -234,7 +210,6 @@ def main():
         return
 
     results_rows = []
-    residuals_all = []
 
     for i, path in enumerate(FILES, start=1):
         file_name = os.path.basename(path)
@@ -244,13 +219,7 @@ def main():
             result, out = process_one_file(path)
             results_rows.append(result)
 
-            residuals_all.extend(out['residuo'].tolist())
-
-            # salva detalhamento por arquivo
-            detail_path = os.path.join(
-                OUT_DIR,
-                f'detalhe_{file_name}'
-            )
+            detail_path = os.path.join(OUT_DIR, f'detalhe_{file_name}')
             out.to_csv(detail_path, sep=';', decimal=',', index=False, encoding='utf-8-sig')
 
         except Exception as e:
@@ -261,43 +230,46 @@ def main():
         return
 
     # -----------------------------------------------------
-    # resultados por arquivo
+    # tabela final por arquivo
     # -----------------------------------------------------
     results_df = pd.DataFrame(results_rows)
 
-    results_csv = os.path.join(OUT_DIR, 'estimativa_R_por_arquivo.csv')
-    results_df.to_csv(results_csv, sep=';', decimal=',', index=False, encoding='utf-8-sig')
+    tabela_path = os.path.join(OUT_DIR, 'tabela_R_desvio_por_arquivo.csv')
+    results_df.to_csv(tabela_path, sep=';', decimal=',', index=False, encoding='utf-8-sig')
 
     # -----------------------------------------------------
-    # estimativa global de R
+    # resumo final
     # -----------------------------------------------------
-    residuals_all = np.asarray(residuals_all, dtype=float)
+    R_medio = float(results_df['R'].mean())
+    desvio_padrao_medio = float(results_df['Desvio_padrao'].mean())
 
-    R_global = estimate_R_from_residual(residuals_all, ddof=1)
-
-    summary = pd.DataFrame([{
+    resumo_df = pd.DataFrame([{
         'Qtd_arquivos_processados': len(results_df),
-        'Qtd_total_amostras': int(np.sum(results_df['N_amostras'])),
-        'R_medio_dos_arquivos': float(results_df['R_estimado'].mean()),
-        'R_mediano_dos_arquivos': float(results_df['R_estimado'].median()),
-        'R_global_todos_residuos': R_global,
-        'RMSE_medio': float(results_df['RMSE'].mean()),
-        'MAE_medio': float(results_df['MAE'].mean()),
-        'R2_medio': float(results_df['R2'].mean())
+        'R_medio': R_medio,
+        'Desvio_padrao_medio': desvio_padrao_medio
     }])
 
-    summary_csv = os.path.join(OUT_DIR, 'resumo_estimativa_R.csv')
-    summary.to_csv(summary_csv, sep=';', decimal=',', index=False, encoding='utf-8-sig')
+    resumo_path = os.path.join(OUT_DIR, 'resumo_R_desvio.csv')
+    resumo_df.to_csv(resumo_path, sep=';', decimal=',', index=False, encoding='utf-8-sig')
+
+    # -----------------------------------------------------
+    # histograma de R
+    # -----------------------------------------------------
+    hist_path = os.path.join(OUT_DIR, 'histograma_R.png')
+    plot_histograma_R(results_df['R'].values, hist_path)
 
     print('\n' + '=' * 80)
     print('Concluído.')
-    print(f'Resultados por arquivo: {results_csv}')
-    print(f'Resumo global: {summary_csv}')
-    print(f'Detalhes por arquivo salvos em: {OUT_DIR}')
+    print(f'Tabela por arquivo: {tabela_path}')
+    print(f'Resumo final: {resumo_path}')
+    print(f'Histograma: {hist_path}')
     print('=' * 80)
 
-    print('\nResumo:')
-    print(summary.to_string(index=False))
+    print('\nTabela por arquivo:')
+    print(results_df.to_string(index=False))
+
+    print('\nResumo final:')
+    print(resumo_df.to_string(index=False))
 
 if __name__ == '__main__':
     main()
