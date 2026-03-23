@@ -179,7 +179,7 @@ def plot_histograma_R(valores_R, out_path):
 
     media_R = np.mean(valores_R)
     desvio_R = np.std(valores_R, ddof=1) if len(valores_R) > 1 else 0.0
-    limite_2sigma = media_R + 4 * desvio_R
+    limite_2sigma = media_R + 2 * desvio_R
 
     plt.figure(figsize=(10, 6))
     plt.hist(valores_R, bins=15, edgecolor='black', alpha=0.7)
