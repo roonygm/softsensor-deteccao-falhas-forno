@@ -1,0 +1,143 @@
+
+(* =========================================================
+   RESET / INICIALIZAÇÃO
+   ========================================================= *)
+IF RESET OR NOT InitDone THEN
+    (* igual ao Python: x0 = [GAS[0], TL[0], TR[0]] *)
+    x1_prev := GAS;
+    x2_prev := TL;
+    x3_prev := TR;
+
+    (* igual ao Python: P0 = diag([10,1,1]) *)
+    P11_prev := 10.0;
+
+    (* armazena entradas atuais para usar como entradas anteriores *)
+    GAS_prev := GAS;
+    TL_prev  := TL;
+    TR_prev  := TR;
+
+    y_est      := 0.0;
+    y_pred     := 0.0;
+    innovation := 0.0;
+    S_k        := 0.0;
+    NIS        := 0.0;
+    K1         := 0.0;
+    K2         := 0.0;
+    K3         := 0.0;
+
+    x1_est     := x1_prev;
+    x2_est     := x2_prev;
+    x3_est     := x3_prev;
+
+    InitDone   := TRUE;
+    firstCycle := TRUE;
+END_IF;
+
+
+(* =========================================================
+   PREDIÇÃO DO ESTADO E COVARIÂNCIA
+   ========================================================= *)
+IF firstCycle THEN
+    (* no primeiro ciclo o Python usa x_prev e P_prev diretamente *)
+    x1_pred := x1_prev;
+    x2_pred := x2_prev;
+    x3_pred := x3_prev;
+
+    p1_pred := 10.0;   (* P11 inicial *)
+    p2_pred := 1.0;    (* P22 inicial *)
+    p3_pred := 1.0;    (* P33 inicial *)
+ELSE
+    (* modelo aumentado específico do seu problema *)
+    x1_pred := alpha * x1_prev + (1.0 - alpha) * GAS_prev;
+    x2_pred := TL_prev;
+    x3_pred := TR_prev;
+
+    (* como Q = diag([Q,Q,Q]) *)
+    p1_pred := (alpha * alpha * P11_prev) + Q;
+    p2_pred := Q;
+    p3_pred := Q;
+END_IF;
+
+
+(* =========================================================
+   SAÍDA PREVISTA
+   y = d_Gf*x1 + a_TL*x2 + b_TR*x3 + c0
+   ========================================================= *)
+y_pred := (d_Gf * x1_pred) + (a_TL * x2_pred) + (b_TR * x3_pred) + c0;
+
+
+(* =========================================================
+   INOVAÇÃO
+   ========================================================= *)
+innovation := TC - y_pred;
+
+
+(* =========================================================
+   VARIÂNCIA DA INOVAÇÃO S(k)
+   ========================================================= *)
+S_k := (d_Gf * d_Gf * p1_pred)
+     + (a_TL * a_TL * p2_pred)
+     + (b_TR * b_TR * p3_pred)
+     + R;
+
+IF S_k < eps THEN
+    S_k := eps;
+END_IF;
+
+
+(* =========================================================
+   NIS
+   ========================================================= *)
+NIS := (innovation * innovation) / S_k;
+
+
+(* =========================================================
+   GANHO DE KALMAN
+   ========================================================= *)
+K1 := (p1_pred * d_Gf) / S_k;
+K2 := (p2_pred * a_TL) / S_k;
+K3 := (p3_pred * b_TR) / S_k;
+
+
+(* =========================================================
+   ATUALIZAÇÃO DOS ESTADOS
+   ========================================================= *)
+x1_filt := x1_pred + (K1 * innovation);
+x2_filt := x2_pred + (K2 * innovation);
+x3_filt := x3_pred + (K3 * innovation);
+
+
+(* =========================================================
+   SAÍDA ESTIMADA APÓS A CORREÇÃO
+   ========================================================= *)
+y_est := (d_Gf * x1_filt) + (a_TL * x2_filt) + (b_TR * x3_filt) + c0;
+
+
+(* =========================================================
+   ATUALIZAÇÃO DA COVARIÂNCIA RELEVANTE
+   ========================================================= *)
+p1_filt := p1_pred * (1.0 - (K1 * d_Gf));
+
+IF p1_filt < 0.0 THEN
+    p1_filt := 0.0;
+END_IF;
+
+
+(* =========================================================
+   SALVA ESTADOS / MEMÓRIA PARA PRÓXIMO CICLO
+   ========================================================= *)
+x1_prev := x1_filt;
+x2_prev := x2_filt;
+x3_prev := x3_filt;
+
+P11_prev := p1_filt;
+
+GAS_prev := GAS;
+TL_prev  := TL;
+TR_prev  := TR;
+
+x1_est := x1_filt;
+x2_est := x2_filt;
+x3_est := x3_filt;
+
+firstCycle := FALSE;
