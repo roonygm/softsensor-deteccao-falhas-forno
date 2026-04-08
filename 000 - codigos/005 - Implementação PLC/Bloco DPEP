@@ -1,0 +1,73 @@
+(* ===================================================== *)
+(* BLOCO DESATIVADO - ZERA TUDO SE HAB = FALSE           *)
+(* ===================================================== *)
+IF NOT HAB THEN
+    InitDone := FALSE;
+    MeanPrev := 0.0;
+    VariPrev := 0.0;
+    Mean := 0.0;
+    Vari := 0.0;
+    STD_EXP := 0.0;
+
+    (* Alarmes também desligados *)
+    ALM_L := FALSE;
+    ALM_H := FALSE;
+    ALM_HH := FALSE;
+
+ELSE
+    (* ===================================================== *)
+    (* RESET DOS ALARMES SOMENTE *)
+    (* ===================================================== *)
+    IF RESET THEN
+        ALM_L := FALSE;
+        ALM_H := FALSE;
+        ALM_HH := FALSE;
+    END_IF;
+
+
+    (* ===================================================== *)
+    (* CÁLCULO EXECUTADO A CADA PULSO                       *)
+    (* ===================================================== *)
+    IF PULSO THEN
+
+        (* Primeira inicialização: evita picos iniciais *)
+        IF NOT InitDone THEN
+            MeanPrev := IN;
+            VariPrev := 0.0;
+            STD_EXP := 0.0;
+            InitDone := TRUE;
+
+        ELSE
+            (* Cálculo incremental estável do desvio padrão exponencial *)
+            delta := IN - MeanPrev;
+            Mean := MeanPrev + ALPHA * delta;
+            Vari := (1.0 - ALPHA) * VariPrev + ALPHA * delta * (IN - Mean);
+
+            IF Vari < 0.0 THEN
+                Vari := 0.0;
+            END_IF;
+
+            STD_EXP := SQRT(Vari);
+
+            MeanPrev := Mean;
+            VariPrev := Vari;
+        END_IF;
+
+        (* ===================================================== *)
+        (* AVALIAÇÃO DOS ALARMES SOMENTE SE HAB = TRUE *)
+        (* ===================================================== *)
+        (* Lógica de alarme baixo *)
+        IF STD_EXP <= L THEN
+            ALM_L := TRUE;
+        END_IF;
+
+        (* Lógica de alarme alto e muito alto *)
+        IF STD_EXP >= HH THEN
+            ALM_HH := TRUE;
+            ALM_H := TRUE;   (* HH implica H *)
+        ELSIF STD_EXP >= H THEN
+            ALM_H := TRUE;
+        END_IF;
+
+    END_IF;
+END_IF;
